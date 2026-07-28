@@ -1,0 +1,18 @@
+{
+  "name": "ai-chat-game",
+  "version": "1.0.0",
+  "description": "图灵测试 × 社交推理聊天游戏",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}

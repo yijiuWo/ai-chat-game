@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>等待室 - 谁是卧底 × AI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">⏳ 等待室</div>
+      <div class="topbar-subtitle">
+        房间号：<span id="room-id-display" style="font-family:'SF Mono','Cascadia Code','Consolas',monospace;letter-spacing:3px;">----</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button id="btn-copy-link" class="btn btn-sm btn-secondary">📋 复制链接</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:28px 24px;gap:16px;">
+    <p class="text-sm text-muted">分享房间号或链接给你的朋友</p>
+
+    <!-- Player List -->
+    <div class="player-list" id="player-list">
+      <!-- dynamically filled -->
+    </div>
+
+    <p id="count-hint" class="text-xs text-muted"></p>
+
+    <!-- Action Buttons -->
+    <div style="display:flex;gap:12px;">
+      <button id="btn-ready" class="btn btn-secondary">✅ 准备</button>
+      <button id="btn-start" class="btn btn-success" disabled>▶ 开始游戏</button>
+    </div>
+
+    <p id="error-msg" style="color:var(--danger);font-size:12px;min-height:18px;"></p>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function () {
+  // ---- Guard: redirect if missing params ----
+  var urlParams = new URLSearchParams(window.location.search);
+  var roomId = urlParams.get('room');
+  var nickname = sessionStorage.getItem('nickname');
+  if (!roomId || !nickname) {
+    window.location.href = '/';
+    return;
+  }
+
+  // ---- State ----
+  var socket = io();
+  var isHost = false;
+  var isReady = false;
+  var players = [];
+  var publicBaseUrl = '';
+
+  // ---- DOM Refs ----
+  var roomIdDisplay = document.getElementById('room-id-display');
+  var playerListEl = document.getElementById('player-list');
+  var countHint = document.getElementById('count-hint');
+  var btnReady = document.getElementById('btn-ready');
+  var btnStart = document.getElementById('btn-start');
+  var btnCopyLink = document.getElementById('btn-copy-link');
+  var errorMsg = document.getElementById('error-msg');
+
+  roomIdDisplay.textContent = roomId;
+
+  // ---- Fetch public URL for share links ----
+  fetch('/api/public-url')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.url) publicBaseUrl = data.url;
+    })
+    .catch(function () {
+      // Fall back to window.location.origin
+    });
+
+  // ---- Re-join on page load (handles refresh / reconnection) ----
+  socket.emit('join_room', { roomId: roomId, nickname: nickname });
+
+  // ===== Socket Events =====
+
+  socket.on('room_joined', function (data) {
+    players = data.players || [];
+    var me = findMe();
+    if (me) {
+      isHost = me.isHost;
+      isReady = me.isReady;
+      updateReadyButton();
+      updateStartButton();
+    }
+    renderPlayerList();
+    updateCountHint();
+  });
+
+  socket.on('player_joined', function (data) {
+    var p = data.player;
+    if (!p) return;
+
+    // Deduplicate: if same nickname already in list, update the entry
+    var existing = findPlayerByNickname(p.nickname);
+    if (existing) {
+      existing.id = p.id;
+      existing._away = false;
+      if (p.id === socket.id) {
+        isHost = p.isHost;
+        isReady = p.isReady;
+        updateReadyButton();
+      }
+    } else {
+      players.push(p);
+    }
+
+    renderPlayerList();
+    updateCountHint();
+    updateStartButton();
+  });
+
+  socket.on('player_disconnected', function (data) {
+    var p = findPlayerById(data.playerId);
+    if (p) p._away = true;
+    renderPlayerList();
+    updateStartButton();
+  });
+
+  socket.on('player_left', function (data) {
+    players = players.filter(function (p) { return p.id !== data.playerId; });
+    renderPlayerList();
+    updateCountHint();
+    updateStartButton();
+  });
+
+  socket.on('ready_update', function (data) {
+    var p = findPlayerById(data.playerId);
+    if (p) {
+      p.isReady = data.isReady;
+      p._away = false; // activity proves they're back
+    }
+    if (data.playerId === socket.id) {
+      isReady = data.isReady;
+      updateReadyButton();
+    }
+    renderPlayerList();
+    updateStartButton();
+  });
+
+  socket.on('you_are_host', function () {
+    isHost = true;
+    // Update my own entry in the players list
+    var me = findMe();
+    if (me) me.isHost = true;
+    renderPlayerList();
+    updateStartButton();
+  });
+
+  socket.on('game_started', function (data) {
+    sessionStorage.setItem('players', JSON.stringify(data.players || []));
+    window.location.href = '/game.html?room=' + roomId;
+  });
+
+  socket.on('error', function (data) {
+    errorMsg.textContent = data.message || '发生错误';
+  });
+
+  // ===== User Actions =====
+
+  btnReady.addEventListener('click', function () {
+    socket.emit('toggle_ready');
+  });
+
+  btnStart.addEventListener('click', function () {
+    errorMsg.textContent = '';
+    socket.emit('start_game');
+  });
+
+  btnCopyLink.addEventListener('click', function () {
+    var base = publicBaseUrl || window.location.origin;
+    var link = base + '/?room=' + roomId;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link).then(function () {
+        btnCopyLink.textContent = '✅ 已复制';
+        setTimeout(function () {
+          btnCopyLink.textContent = '📋 复制链接';
+        }, 2000);
+      }).catch(function () {
+        fallbackCopy(link);
+      });
+    } else {
+      fallbackCopy(link);
+    }
+  });
+
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    prompt('复制这个链接（Ctrl+C）：', text);
+  }
+
+  // ===== Rendering =====
+
+  function renderPlayerList() {
+    if (!players.length) {
+      playerListEl.innerHTML =
+        '<div class="text-sm text-muted text-center" style="padding:24px 0;">等待玩家加入...</div>';
+      return;
+    }
+
+    playerListEl.innerHTML = players.map(function (p) {
+      var itemClass = 'player-item' + (p._away ? ' away' : '');
+      var statusClass = p._away
+        ? 'waiting'
+        : (p.isReady ? 'ready' : 'waiting');
+      var statusText = p._away
+        ? '⚠️ 暂离'
+        : (p.isReady ? '✅ 已准备' : '⏳ 未准备');
+
+      var hostBadgeHtml = p.isHost
+        ? ' <span class="host-badge">👑</span>'
+        : '';
+
+      return '' +
+        '<div class="' + itemClass + '">' +
+          '<div class="player-left">' +
+            '<span class="player-avatar">' + escapeHtml(p.avatar) + '</span>' +
+            '<span class="player-name">' + escapeHtml(p.nickname) + hostBadgeHtml + '</span>' +
+          '</div>' +
+          '<span class="player-status ' + statusClass + '">' + statusText + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function updateReadyButton() {
+    if (isReady) {
+      btnReady.textContent = '❌ 取消准备';
+      btnReady.className = 'btn btn-secondary';
+    } else {
+      btnReady.textContent = '✅ 准备';
+      btnReady.className = 'btn btn-primary';
+    }
+  }
+
+  function updateStartButton() {
+    // Only count non-away active players for the "all ready" check
+    var activePlayers = players.filter(function (p) { return !p._away; });
+    var allReady = activePlayers.length >= 4 &&
+      activePlayers.every(function (p) { return p.isReady; });
+
+    if (!isHost) {
+      btnStart.textContent = '🔒 等待房主开始';
+      btnStart.disabled = true;
+    } else if (!allReady) {
+      btnStart.textContent = '▶ 等待所有人准备';
+      btnStart.disabled = true;
+    } else {
+      btnStart.textContent = '▶ 开始游戏';
+      btnStart.disabled = false;
+    }
+  }
+
+  function updateCountHint() {
+    var activePlayers = players.filter(function (p) { return !p._away; });
+    countHint.textContent =
+      '已加入 ' + activePlayers.length + ' 人（至少 4 人）';
+  }
+
+  // ===== Helpers =====
+
+  function findMe() {
+    for (var i = 0; i < players.length; i++) {
+      if (players[i].id === socket.id) return players[i];
+    }
+    return null;
+  }
+
+  function findPlayerById(id) {
+    for (var i = 0; i < players.length; i++) {
+      if (players[i].id === id) return players[i];
+    }
+    return null;
+  }
+
+  function findPlayerByNickname(name) {
+    for (var i = 0; i < players.length; i++) {
+      if (players[i].nickname === name) return players[i];
+    }
+    return null;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>谁是卧底 × AI</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ---- Inline critical styles for elements not in style.css ---- */
+    .word-bar { display: none; }
+    .speaker-spotlight { display: none; }
+    .overlay { display: none; }
+    .eliminate-overlay { display: none; }
+    .result-page { display: none; }
+    .input-bar { transition: opacity 0.25s var(--ease-out); }
+    .input-bar.locked { opacity: 0.45; pointer-events: none; }
+    .input-bar.locked .input { background: rgba(255,255,255,0.02); }
+    .vote-actions { display: flex; gap: 10px; margin-top: 12px; }
+    .vote-actions .btn { flex: 1; }
+    .result-body { text-align: left; margin-top: 20px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ====== Top Bar ====== -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="round-label">准备中...</div>
+      <div class="topbar-subtitle">
+        <span id="player-count"></span>
+        <span class="text-muted" id="mode-badge"></span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button id="btn-leave" class="btn btn-sm btn-secondary" title="离开房间">退出</button>
+    </div>
+  </div>
+
+  <!-- ====== Word Bar (Undercover mode) ====== -->
+  <div class="word-bar" id="word-bar" style="margin-top:12px;">
+    <div class="word-bar-label">你的词</div>
+    <div class="word-bar-word" id="word-bar-word">----</div>
+  </div>
+
+  <!-- ====== Speaker Spotlight ====== -->
+  <div class="speaker-spotlight" id="speaker-spotlight" style="margin-top:12px;">
+    <div class="speaker-avatar" id="speaker-avatar">🎤</div>
+    <div class="speaker-info">
+      <div class="speaker-name" id="speaker-name"></div>
+      <div class="speaker-hint" id="speaker-hint">正在描述...</div>
+    </div>
+    <div class="speaker-timer">
+      <svg class="timer-ring" viewBox="0 0 44 44">
+        <circle class="timer-ring-bg" cx="22" cy="22" r="19"></circle>
+        <circle class="timer-ring-fill" id="timer-ring-fill" cx="22" cy="22" r="19"
+          stroke-dasharray="119.38" stroke-dashoffset="0"></circle>
+      </svg>
+      <div class="timer-text" id="timer-ring-text">30</div>
+    </div>
+  </div>
+
+  <!-- ====== Chat Area ====== -->
+  <div class="chat-area" id="chat-area" style="margin-top:12px;">
+    <div class="msg-system">游戏即将开始...</div>
+  </div>
+
+  <!-- ====== Input Bar ====== -->
+  <div class="input-bar" id="input-bar">
+    <input type="text" class="input" id="chat-input"
+      placeholder="说出你的描述..." maxlength="200" autocomplete="off">
+    <button class="btn btn-primary" id="btn-send">发送</button>
+    <button class="btn btn-sm" id="btn-call-vote" style="display:none;flex-shrink:0;background:var(--danger);color:#fff;font-weight:700;animation:spotlightPulse 1.5s ease-in-out infinite;">🗳️ 发起投票</button>
+  </div>
+
+  <!-- ====== Vote Overlay ====== -->
+  <div class="overlay" id="vote-overlay">
+    <div class="vote-card">
+      <h3 id="vote-title">🗳️ 投票</h3>
+      <p class="subtitle" id="vote-subtitle">选出你认为最可疑的人</p>
+      <div class="vote-timer-bar">
+        <div class="vote-timer-fill" id="vote-timer-fill" style="width:100%;"></div>
+      </div>
+      <div class="vote-candidates" id="vote-candidates"></div>
+      <div class="vote-actions">
+        <button class="btn btn-secondary" id="btn-skip-vote">弃票</button>
+        <button class="btn btn-primary" id="btn-confirm-vote" disabled>确认投票</button>
+      </div>
+      <p class="text-xs text-muted text-center mt-8" id="vote-countdown">剩余 30 秒</p>
+    </div>
+  </div>
+
+  <!-- ====== Eliminate Overlay ====== -->
+  <div class="eliminate-overlay" id="eliminate-overlay">
+    <div class="eliminate-card">
+      <div class="eliminate-emoji" id="eliminate-emoji">🚪</div>
+      <div class="eliminate-title" id="eliminate-title"></div>
+      <div class="eliminate-subtitle" id="eliminate-subtitle"></div>
+    </div>
+  </div>
+
+  <!-- ====== Result Page (AI Reveal) ====== -->
+  <div class="result-page" id="result-page">
+    <div class="result-emoji" id="result-emoji"></div>
+    <div class="result-title" id="result-title"></div>
+    <p class="result-subtitle" id="result-subtitle"></p>
+
+    <div class="reveal-card mt-16" id="reveal-card">
+      <div class="reveal-row">
+        <span class="reveal-label">AI 身份</span>
+        <span class="reveal-player" id="reveal-ai"></span>
+      </div>
+      <div class="reveal-row">
+        <span class="reveal-label">卧底身份</span>
+        <span class="reveal-player" id="reveal-undercover"></span>
+      </div>
+      <div class="reveal-row" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">
+        <span class="reveal-label">词语配对</span>
+        <span id="reveal-words" style="font-size:14px;font-weight:600;"></span>
+      </div>
+    </div>
+
+    <div class="mt-16" id="vote-bars"></div>
+
+    <button class="btn btn-primary mt-24" id="btn-back-lobby" style="width:100%;max-width:300px;">
+      返回房间
+    </button>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ==============================
+//  Page bootstrap (before client.js)
+// ==============================
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var roomId = params.get('room');
+  var nickname = sessionStorage.getItem('nickname');
+
+  if (!roomId || !nickname) {
+    window.location.href = '/';
+    return;
+  }
+
+  // Expose early state for client.js to consume
+  window.__bootstrap = { roomId: roomId, nickname: nickname };
+
+  // Pre-initialise socket reference so client.js can use it
+  window.__socket = io();
+
+  window.__socket.on('connect', function() {
+    window.__socket.emit('join_game', { roomId: roomId, nickname: nickname });
+  });
+  if (window.__socket.connected) {
+    window.__socket.emit('join_game', { roomId: roomId, nickname: nickname });
+  }
+})();
+</script>
+<script src="client.js"></script>
+</body>
+</html>

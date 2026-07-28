@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>谁是卧底 × AI</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="landing">
+    <div class="landing-logo">🔍</div>
+    <h1 class="landing-title">谁是卧底 × AI</h1>
+    <p class="landing-subtitle">图灵测试 × 社交推理 — 在游戏中找出隐藏的AI</p>
+
+    <div class="landing-form">
+      <input
+        type="text"
+        id="nickname"
+        class="input"
+        placeholder="你的昵称"
+        maxlength="12"
+        autofocus
+      >
+
+      <button id="btn-create" class="btn btn-primary">创建房间</button>
+
+      <div class="divider-row">
+        <div class="divider-line"></div>
+        <span class="divider-text">或加入已有房间</span>
+        <div class="divider-line"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <input
+          type="text"
+          id="room-id-input"
+          class="input input-center"
+          placeholder="房间号"
+          maxlength="6"
+        >
+        <button id="btn-join" class="btn btn-secondary" style="flex-shrink:0;">加入</button>
+      </div>
+
+      <p id="error-msg" style="color:var(--danger);font-size:12px;min-height:18px;"></p>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function () {
+  var urlParams = new URLSearchParams(window.location.search);
+  var prefillRoom = urlParams.get('room');
+  if (prefillRoom) {
+    document.getElementById('room-id-input').value = prefillRoom.toUpperCase();
+  }
+
+  var nicknameInput = document.getElementById('nickname');
+  var roomInput = document.getElementById('room-id-input');
+  var btnCreate = document.getElementById('btn-create');
+  var btnJoin = document.getElementById('btn-join');
+  var errorMsg = document.getElementById('error-msg');
+
+  var socket = io();
+  var pending = false;
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+  }
+
+  function clearError() {
+    errorMsg.textContent = '';
+  }
+
+  function setPending(v) {
+    pending = v;
+    btnCreate.disabled = v;
+    btnJoin.disabled = v;
+  }
+
+  function getNickname() {
+    return nicknameInput.value.trim();
+  }
+
+  function getRoomId() {
+    return roomInput.value.trim();
+  }
+
+  function doCreate() {
+    var nickname = getNickname();
+    if (!nickname) {
+      showError('请输入昵称');
+      nicknameInput.focus();
+      return false;
+    }
+    if (pending) return false;
+
+    clearError();
+    setPending(true);
+    sessionStorage.setItem('nickname', nickname);
+    socket.emit('create_room', { nickname: nickname });
+    return true;
+  }
+
+  function doJoin() {
+    var nickname = getNickname();
+    var roomId = getRoomId();
+    if (!nickname) {
+      showError('请输入昵称');
+      nicknameInput.focus();
+      return false;
+    }
+    if (!roomId) {
+      showError('请输入房间号');
+      roomInput.focus();
+      return false;
+    }
+    if (pending) return false;
+
+    clearError();
+    setPending(true);
+    sessionStorage.setItem('nickname', nickname);
+    socket.emit('join_room', { roomId: roomId, nickname: nickname });
+    return true;
+  }
+
+  btnCreate.addEventListener('click', doCreate);
+  btnJoin.addEventListener('click', doJoin);
+
+  nicknameInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // If room field is prefilled and nickname is empty, focus nickname;
+      // otherwise create room
+      if (prefillRoom && !getNickname()) {
+        return;
+      }
+      doCreate();
+    }
+  });
+
+  roomInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doJoin();
+    }
+  });
+
+  // Convert typed room ID to uppercase
+  roomInput.addEventListener('input', function () {
+    roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  });
+
+  socket.on('room_created', function (data) {
+    sessionStorage.setItem('roomId', data.roomId);
+    window.location.href = '/room.html?room=' + data.roomId;
+  });
+
+  socket.on('room_joined', function (data) {
+    sessionStorage.setItem('roomId', data.roomId);
+    window.location.href = '/room.html?room=' + data.roomId;
+  });
+
+  socket.on('error', function (data) {
+    showError(data.message || '发生错误');
+    setPending(false);
+  });
+
+  // Re-enable buttons if socket disconnects while waiting
+  socket.on('disconnect', function () {
+    if (pending) {
+      showError('连接断开，请刷新重试');
+      setPending(false);
+    }
+  });
+})();
+</script>
+</body>
+</html>
