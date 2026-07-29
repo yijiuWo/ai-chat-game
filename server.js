@@ -24,6 +24,29 @@ app.get('/api/public-url', (req, res) => {
   res.json({ url: process.env.PUBLIC_URL || '' });
 });
 
+// AI 诊断端点（排查 AI 调用失败原因）
+app.get('/api/ai-health', async (req, res) => {
+  const { generateReply } = require('./src/ai');
+  const info = {
+    provider: process.env.AI_PROVIDER || '(not set)',
+    model: process.env.QWEN_MODEL || process.env.DEEPSEEK_MODEL || '(not set)',
+    hasQwenKey: !!process.env.QWEN_API_KEY,
+    hasDeepseekKey: !!process.env.DEEPSEEK_API_KEY,
+    nodeVersion: process.version,
+  };
+
+  try {
+    const reply = await generateReply('回复"OK"即可', '请回复OK');
+    info.aiTest = reply ? reply.slice(0, 100) : '(empty)';
+    info.aiOk = true;
+  } catch (err) {
+    info.aiOk = false;
+    info.aiError = err.message;
+  }
+
+  res.json(info);
+});
+
 // ===== Socket.IO 事件处理 =====
 io.on('connection', (socket) => {
   console.log(`[连接] ${socket.id}`);

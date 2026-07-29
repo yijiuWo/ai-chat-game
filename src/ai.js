@@ -46,7 +46,7 @@ async function generateReply(systemPrompt, userPrompt) {
   const provider = PROVIDERS[AI_PROVIDER];
 
   if (!provider || !provider.key || provider.key.includes('your_')) {
-    console.error(`[AI] Provider "${AI_PROVIDER}" not configured. Set API key in .env`);
+    console.error(`[AI] Provider "${AI_PROVIDER}" not configured. key=${!!provider?.key} hasProvider=${!!provider}`);
     return getFallback();
   }
 
@@ -54,6 +54,7 @@ async function generateReply(systemPrompt, userPrompt) {
   const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
+    console.log(`[AI] Calling ${AI_PROVIDER} (${provider.model})...`);
     const response = await fetch(provider.url, {
       method: 'POST',
       headers: {
