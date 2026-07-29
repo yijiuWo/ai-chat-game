@@ -160,7 +160,7 @@ socket.on('round_started', ({ round, voteRound, mode, totalInRound, label }) => 
 });
 
 // ---------- turn_start ----------
-socket.on('turn_start', ({ playerId, playerName, playerAvatar, index, total, duration, subRound }) => {
+socket.on('turn_start', ({ playerId, playerName, playerAvatar, gameNumber, gameColor, index, total, duration, subRound }) => {
   state.currentSpeakerId = playerId;
   state.isMyTurn = (playerId === state.myId);
   clearTimer();
@@ -172,12 +172,11 @@ socket.on('turn_start', ({ playerId, playerName, playerAvatar, index, total, dur
     $('#btn-call-vote').style.display = 'none';
   }
 
-  const avatar = playerAvatar || '🎤';
   const name   = playerName || '未知';
 
-  // 优先用事件里的游戏编号，其次查找本地玩家列表
-  const gNumber = data.gameNumber;
-  const gColor = data.gameColor;
+  // 优先用事件里的游戏编号显示彩色圆圈
+  const gNumber = gameNumber;
+  const gColor = gameColor;
   const speakerCircle = (gNumber != null)
     ? renderPlayerCircle(gNumber, gColor, 40)
     : null;
@@ -187,8 +186,9 @@ socket.on('turn_start', ({ playerId, playerName, playerAvatar, index, total, dur
   if (speakerCircle) {
     speakerAvatar.innerHTML = speakerCircle;
   } else {
-    speakerAvatar.textContent = avatar;
+    speakerAvatar.textContent = playerAvatar || '🎤';
   }
+  speakerName.textContent = name;
   if (state.isMyTurn) {
     speakerSpotlight.classList.add('my-turn');
     speakerHint.textContent = '🔥 轮到你了！用一句话描述你的词';
@@ -198,11 +198,11 @@ socket.on('turn_start', ({ playerId, playerName, playerAvatar, index, total, dur
   } else {
     speakerSpotlight.classList.remove('my-turn');
   }
-  speakerAvatar.textContent = avatar;
-  speakerName.textContent = name;
-  speakerHint.textContent = (index != null && total != null)
-    ? '第 ' + index + '/' + total + ' 位 · 正在描述...'
-    : '正在描述...';
+  if (!state.isMyTurn) {
+    speakerHint.textContent = (index != null && total != null)
+      ? '第 ' + index + '/' + total + ' 位 · 正在描述...'
+      : '正在描述...';
+  }
 
   // Reset timer ring
   const totalSeconds = Math.ceil((duration || 30000) / 1000);
@@ -586,11 +586,19 @@ $('#btn-leave').addEventListener('click', () => {
 // ============================================================================
 
 /**
- * 播放提示音（Web Audio API 生成短促"叮"声）
+ * 播放提示音（复用单个 AudioContext，避免泄漏）
  */
+let _audioCtx = null;
+function _getAudioCtx() {
+  if (!_audioCtx) {
+    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  }
+  return _audioCtx;
+}
 function playTurnSound() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _getAudioCtx();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);

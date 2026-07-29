@@ -246,8 +246,12 @@ io.on('connection', (socket) => {
           playerId: currentId,
           playerName: display.name,
           playerAvatar: display.avatar,
+          gameNumber: display.gameNumber,
+          gameColor: display.gameColor,
           index: room.describeIndex + 1,
           total: room.describeOrder.length,
+          duration: 30000,
+          subRound: room.subRound,
         });
       }
     } else if (room.state === 'ROUND_VOTE') {

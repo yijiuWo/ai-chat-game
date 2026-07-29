@@ -307,9 +307,10 @@ function startEliminationVote(room, io) {
   if (room._callVoteTimer) { clearTimeout(room._callVoteTimer); room._callVoteTimer = null; }
 
   const activeIds = getAllActiveIds(room).filter(id => !room.eliminatedPlayers.includes(id));
-  const candidates = activeIds.map(id => ({
-    id, nickname: getPlayerDisplay(room, id).name, avatar: getPlayerDisplay(room, id).avatar,
-  }));
+  const candidates = activeIds.map(id => {
+    const d = getPlayerDisplay(room, id);
+    return { id, nickname: d.name, avatar: d.avatar, gameNumber: d.gameNumber, gameColor: d.gameColor };
+  });
 
   io.to(room.id).emit('vote_start', {
     candidates, duration: VOTE_DURATION, type: 'eliminate', round: room.voteRound,
@@ -390,9 +391,10 @@ function startFinalAiVote(room, io) {
   room.votes = [];
   room._voteRound = 999;
 
-  const candidates = getAllActiveIds(room).map(id => ({
-    id, nickname: getPlayerDisplay(room, id).name, avatar: getPlayerDisplay(room, id).avatar,
-  }));
+  const candidates = getAllActiveIds(room).map(id => {
+    const d = getPlayerDisplay(room, id);
+    return { id, nickname: d.name, avatar: d.avatar, gameNumber: d.gameNumber, gameColor: d.gameColor };
+  });
 
   io.to(room.id).emit('vote_start', {
     candidates, duration: VOTE_DURATION, type: 'final_ai', label: '🤖 谁是 AI？',
