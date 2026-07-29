@@ -256,7 +256,7 @@
   function updateStartButton() {
     // Only count non-away active players for the "all ready" check
     var activePlayers = players.filter(function (p) { return !p._away; });
-    var allReady = activePlayers.length >= 4 &&
+    var allReady = activePlayers.length >= 3 &&
       activePlayers.every(function (p) { return p.isReady; });
 
     if (!isHost) {
@@ -274,7 +274,7 @@
   function updateCountHint() {
     var activePlayers = players.filter(function (p) { return !p._away; });
     countHint.textContent =
-      '已加入 ' + activePlayers.length + ' 人（至少 4 人）';
+      '已加入 ' + activePlayers.length + ' 人（至少 3 人）';
   }
 
   // ===== Helpers =====
