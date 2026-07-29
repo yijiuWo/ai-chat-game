@@ -43,6 +43,12 @@ const FALLBACKS = [
  * @returns {Promise<string|null>} AI 回复文本，失败返回兜底话术
  */
 async function generateReply(systemPrompt, userPrompt) {
+  // 检查 fetch 是否可用（Node 18+）
+  if (typeof fetch !== 'function') {
+    console.error('[AI] fetch is not available — Node version is ' + process.version + ', need >=18');
+    return getFallback();
+  }
+
   const provider = PROVIDERS[AI_PROVIDER];
 
   if (!provider || !provider.key || provider.key.includes('your_')) {

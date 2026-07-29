@@ -12,6 +12,9 @@
     "express": "^4.21.0",
     "socket.io": "^4.7.5"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "socket.io-client": "^4.8.3"
   }
