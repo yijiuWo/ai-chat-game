@@ -433,7 +433,7 @@ socket.on('ai_reveal', ({ aiPlayer, undercoverPlayer, wordPair, guessedCorrectly
       const row = document.createElement('div');
       row.className = 'vote-bar-row';
       row.innerHTML =
-        '<span class="vote-bar-label">' + escapeHtml(r.avatar || '👤') + ' ' + escapeHtml(r.nickname || r.playerName || '?') + '</span>' +
+        '<span class="vote-bar-label">' + escapeHtml(r.avatar || '👤') + ' ' + escapeHtml(r.name || r.nickname || r.playerName || '?') + '</span>' +
         '<div class="vote-bar-track">' +
           '<div class="vote-bar-fill' + (isTop ? ' top' : '') + '" style="width:' + pct + '%;"></div>' +
         '</div>' +

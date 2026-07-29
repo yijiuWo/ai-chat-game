@@ -419,6 +419,13 @@ function revealAi(room, io) {
 
   room.players.forEach(p => { p.isReady = false; delete p.gameName; delete p.gameAvatar; });
 
+  // ★ 确保游戏结束后始终有人是房主
+  const hasHost = room.players.some(p => p.isHost);
+  if (!hasHost) {
+    const first = room.players[0];
+    if (first) { first.isHost = true; room.ownerSocketId = first.id; }
+  }
+
   room.resultTimer = setTimeout(() => {
     room.aiPlayer = null;
     io.to(room.id).emit('back_to_lobby');
