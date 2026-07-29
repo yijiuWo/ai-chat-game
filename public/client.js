@@ -175,11 +175,26 @@ socket.on('turn_start', ({ playerId, playerName, playerAvatar, index, total, dur
   const avatar = playerAvatar || '🎤';
   const name   = playerName || '未知';
 
+  // 优先用事件里的游戏编号，其次查找本地玩家列表
+  const gNumber = data.gameNumber;
+  const gColor = data.gameColor;
+  const speakerCircle = (gNumber != null)
+    ? renderPlayerCircle(gNumber, gColor, 40)
+    : null;
+
   // Show speaker spotlight
   speakerSpotlight.style.display = 'flex';
+  if (speakerCircle) {
+    speakerAvatar.innerHTML = speakerCircle;
+  } else {
+    speakerAvatar.textContent = avatar;
+  }
   if (state.isMyTurn) {
     speakerSpotlight.classList.add('my-turn');
     speakerHint.textContent = '🔥 轮到你了！用一句话描述你的词';
+    // 多重提醒
+    playTurnSound();
+    vibrateTurn();
   } else {
     speakerSpotlight.classList.remove('my-turn');
   }
@@ -257,6 +272,43 @@ socket.on('chat_message', (msg) => {
   appendMessage(msg);
 });
 
+// ---------- call_vote_started ----------
+socket.on('call_vote_started', ({ caller, callerId, countdown }) => {
+  clearTimer();
+  hideSpeakerSpotlight();
+  $('#btn-call-vote').style.display = 'none';
+  inputBar.classList.add('locked');
+  chatInput.disabled = true;
+
+  // 在聊天区显示倒计时
+  const countdownDiv = document.createElement('div');
+  countdownDiv.className = 'msg-system';
+  countdownDiv.style.cssText = 'background:rgba(239,68,68,0.15);padding:12px 16px;border-radius:8px;font-size:15px;font-weight:700;';
+  countdownDiv.id = 'call-vote-countdown-msg';
+
+  const durS = Math.ceil(countdown / 1000);
+  countdownDiv.textContent = '🗳️ ' + caller + ' 发起投票 — ' + durS + ' 秒后开始...';
+  chatArea.appendChild(countdownDiv);
+  chatArea.scrollTop = chatArea.scrollHeight;
+
+  // 倒计时更新
+  const start = Date.now();
+  const countdownTimer = setInterval(() => {
+    const remaining = Math.ceil((countdown - (Date.now() - start)) / 1000);
+    const el = document.getElementById('call-vote-countdown-msg');
+    if (el && remaining > 0) {
+      el.textContent = '🗳️ ' + caller + ' 发起投票 — ' + remaining + ' 秒后开始...';
+    }
+    if (remaining <= 0) {
+      clearInterval(countdownTimer);
+      const el2 = document.getElementById('call-vote-countdown-msg');
+      if (el2) el2.remove();
+    }
+  }, 300);
+
+  chatInput.placeholder = '投票即将开始...';
+});
+
 // ---------- vote_start ----------
 socket.on('vote_start', ({ candidates, duration, type, round, label }) => {
   state.isVoting = true;
@@ -287,10 +339,13 @@ socket.on('vote_start', ({ candidates, duration, type, round, label }) => {
   voteCandidates.innerHTML = '';
   (candidates || []).forEach(c => {
     if (c.id === state.myId) return; // can't vote self
+    const circle = (c.gameNumber != null)
+      ? renderPlayerCircle(c.gameNumber, c.gameColor, 32)
+      : escapeHtml(c.avatar || '👤');
     const div = document.createElement('div');
     div.className = 'vote-candidate';
     div.innerHTML =
-      '<span class="candidate-avatar">' + escapeHtml(c.avatar || '👤') + '</span>' +
+      '<span class="candidate-avatar">' + circle + '</span>' +
       '<span class="candidate-name">' + escapeHtml(c.nickname || c.playerName || '?') + '</span>' +
       '<span class="candidate-check">✓</span>';
     div.addEventListener('click', () => {
@@ -430,10 +485,13 @@ socket.on('ai_reveal', ({ aiPlayer, undercoverPlayer, wordPair, guessedCorrectly
     results.forEach(r => {
       const pct = Math.round(((r.votes || 0) / maxVotes) * 100);
       const isTop = (r.votes || 0) === maxVotes && maxVotes > 0;
+      const circle = (r.gameNumber != null)
+        ? renderPlayerCircle(r.gameNumber, r.gameColor, 20)
+        : escapeHtml(r.avatar || '👤');
       const row = document.createElement('div');
       row.className = 'vote-bar-row';
       row.innerHTML =
-        '<span class="vote-bar-label">' + escapeHtml(r.avatar || '👤') + ' ' + escapeHtml(r.name || r.nickname || r.playerName || '?') + '</span>' +
+        '<span class="vote-bar-label">' + circle + ' ' + escapeHtml(r.name || r.nickname || r.playerName || '?') + '</span>' +
         '<div class="vote-bar-track">' +
           '<div class="vote-bar-fill' + (isTop ? ' top' : '') + '" style="width:' + pct + '%;"></div>' +
         '</div>' +
@@ -528,6 +586,61 @@ $('#btn-leave').addEventListener('click', () => {
 // ============================================================================
 
 /**
+ * 播放提示音（Web Audio API 生成短促"叮"声）
+ */
+function playTurnSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.25);
+  } catch(e) { /* 静默失败 */ }
+}
+
+/**
+ * 手机震动提醒
+ */
+function vibrateTurn() {
+  try {
+    if (navigator.vibrate) navigator.vibrate([150, 80, 150]);
+  } catch(e) { /* 静默失败 */ }
+}
+
+/**
+ * 渲染玩家编号圆圈
+ * @param {number} num - 编号 1-5
+ * @param {string} color - CSS 颜色
+ * @param {number} size - 圆圈大小 px
+ * @returns {string} HTML
+ */
+function renderPlayerCircle(num, color, size) {
+  size = size || 28;
+  const font = size > 30 ? '16px' : '12px';
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;' +
+    'width:' + size + 'px;height:' + size + 'px;border-radius:50%;' +
+    'background:' + (color || '#666') + ';color:#fff;font-weight:700;' +
+    'font-size:' + font + ';flex-shrink:0;">' + (num || '?') + '</span>';
+}
+
+/**
+ * 根据 senderId 从玩家列表查找编号和颜色
+ */
+function getPlayerBadge(senderId) {
+  const p = state.players.find(p => p.id === senderId);
+  if (p && p.gameNumber) {
+    return renderPlayerCircle(p.gameNumber, p.gameColor, 28);
+  }
+  return null;
+}
+
+/**
  * XSS-safe HTML escaping
  */
 function escapeHtml(str) {
@@ -555,8 +668,14 @@ function appendMessage(msg) {
 
   const bubbleClass = msg.isDescription ? ' desc' : '';
 
+  // 优先用彩色编号圆圈，其次用 emoji 头像
+  const badge = getPlayerBadge(msg.senderId);
+  const avatarHtml = badge
+    ? badge
+    : '<span class="msg-avatar-text">' + escapeHtml(msg.senderAvatar || '👤') + '</span>';
+
   wrapper.innerHTML =
-    '<div class="msg-avatar">' + escapeHtml(msg.senderAvatar || '👤') + '</div>' +
+    '<div class="msg-avatar">' + avatarHtml + '</div>' +
     '<div class="msg-body">' +
       '<div class="msg-name">' + escapeHtml(msg.senderName || '?') + '</div>' +
       '<div class="msg-bubble' + bubbleClass + '">' + escapeHtml(msg.content || '') + '</div>' +
@@ -594,9 +713,12 @@ function appendVoteBars(results) {
   results.forEach(r => {
     const pct = Math.round(((r.votes || 0) / maxVotes) * 100);
     const isTop = (r.votes || 0) === maxVotes && maxVotes > 0;
+    const circle = (r.gameNumber != null)
+      ? renderPlayerCircle(r.gameNumber, r.gameColor, 20)
+      : escapeHtml(r.avatar || r.targetAvatar || '👤');
     html +=
       '<div class="vote-bar-row" style="margin-top:6px;">' +
-        '<span class="vote-bar-label" style="width:60px;">' + escapeHtml(r.avatar || '👤') + ' ' + escapeHtml(r.nickname || r.playerName || r.name || '?') + '</span>' +
+        '<span class="vote-bar-label" style="width:60px;">' + circle + ' ' + escapeHtml(r.nickname || r.playerName || r.name || r.targetName || '?') + '</span>' +
         '<div class="vote-bar-track">' +
           '<div class="vote-bar-fill' + (isTop ? ' top' : '') + '" style="width:' + pct + '%;"></div>' +
         '</div>' +

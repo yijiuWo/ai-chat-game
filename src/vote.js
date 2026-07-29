@@ -76,16 +76,24 @@ function tallyVotes(room) {
   }
 
   const allTargets = [
-    ...room.players.map(p => ({ id: p.id, name: p.gameName || p.nickname, avatar: p.avatar })),
+    ...room.players.map(p => ({
+      id: p.id, name: p.gameName || p.nickname, avatar: p.avatar,
+      gameNumber: p.gameNumber, gameColor: p.gameColor,
+    })),
   ];
   if (room.aiPlayer) {
-    allTargets.push({ id: room.aiPlayer.id, name: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar });
+    allTargets.push({
+      id: room.aiPlayer.id, name: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar,
+      gameNumber: room.aiPlayer.gameNumber, gameColor: room.aiPlayer.gameColor,
+    });
   }
 
   return allTargets.map(t => ({
     targetId: t.id,
     targetName: t.name,
     targetAvatar: t.avatar,
+    gameNumber: t.gameNumber,
+    gameColor: t.gameColor,
     votes: counts.get(t.id) || 0,
   }));
 }

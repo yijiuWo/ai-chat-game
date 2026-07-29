@@ -191,7 +191,11 @@ body::before {
   font-size: 18px; flex-shrink: 0;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden;
 }
+/* Colored circle badges inside msg-avatar — remove default bg */
+.msg-avatar span { border: none; }
+.msg-avatar-text { font-size: 16px; }
 .msg-body { display: flex; flex-direction: column; min-width: 0; }
 .msg-name { font-size: 10px; color: var(--text-secondary); margin-bottom: 3px; }
 .msg-self .msg-name { text-align: right; }
@@ -242,16 +246,17 @@ body::before {
   animation: spotlightPulse 2s ease-in-out infinite;
   transition: all 0.3s var(--ease-out);
 }
-/* When it's YOUR turn — extra aggressive glow */
+/* When it's YOUR turn — aggressive glow with scale */
 .speaker-spotlight.my-turn {
   border-color: var(--gold);
-  background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%);
-  box-shadow: 0 0 30px var(--gold-glow), inset 0 0 20px rgba(245,158,11,0.05);
-  animation: myTurnPulse 1s ease-in-out infinite;
+  background: linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(245,158,11,0.08) 100%);
+  box-shadow: 0 0 40px var(--gold-glow), 0 0 80px rgba(245,158,11,0.15), inset 0 0 30px rgba(245,158,11,0.08);
+  animation: myTurnPulse 0.8s ease-in-out infinite;
+  transform: scale(1.02);
 }
 @keyframes myTurnPulse {
-  0%, 100% { box-shadow: 0 0 30px var(--gold-glow), inset 0 0 20px rgba(245,158,11,0.05); }
-  50% { box-shadow: 0 0 50px rgba(245,158,11,0.5), inset 0 0 30px rgba(245,158,11,0.1); }
+  0%, 100% { box-shadow: 0 0 40px var(--gold-glow), 0 0 80px rgba(245,158,11,0.15); }
+  50% { box-shadow: 0 0 60px rgba(245,158,11,0.6), 0 0 120px rgba(245,158,11,0.25); }
 }
 @keyframes spotlightPulse {
   0%, 100% { border-color: rgba(167,139,250,0.3); box-shadow: 0 0 16px rgba(167,139,250,0.1); }
@@ -266,6 +271,12 @@ body::before {
   border: 2px solid var(--accent);
   box-shadow: 0 0 20px var(--accent-glow);
   animation: avatarGlow 1.5s ease-in-out infinite;
+  overflow: hidden;
+}
+/* When speaker avatar contains a colored circle, remove default styling */
+.speaker-avatar span {
+  border: none !important;
+  box-shadow: none !important;
 }
 @keyframes avatarGlow {
   0%, 100% { box-shadow: 0 0 20px var(--accent-glow); }

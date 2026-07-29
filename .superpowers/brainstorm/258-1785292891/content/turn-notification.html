@@ -1,0 +1,78 @@
+<h2>发言提醒增强方案</h2>
+<p class="subtitle">当前：金色脉冲光晕 + "🔥 轮到你了" — 容易被忽略。以下是增强方案</p>
+
+<div class="section">
+  <h3>当前 vs 增强后对比</h3>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">当前：容易被忽略</div>
+    <div class="mockup-body" style="padding:20px;text-align:center;">
+      <div style="padding:20px;background:#1a1228;border-radius:12px;border:2px solid #f0c060;animation:pulse 1.5s infinite;">
+        <div style="font-size:40px;margin-bottom:8px;">🎤</div>
+        <div style="color:#f0c060;font-size:18px;font-weight:700;">你的名字</div>
+        <div style="color:#f0c060;font-size:13px;margin-top:4px;">🔥 轮到你了！用一句话描述你的词</div>
+      </div>
+      <p style="color:#f87171;font-size:12px;margin-top:12px;">❌ 只有一个区域亮，容易被聊天消息淹没</p>
+    </div>
+  </div>
+  <div class="mockup">
+    <div class="mockup-header">增强后：多重提醒</div>
+    <div class="mockup-body" style="padding:20px;text-align:center;">
+      <div style="padding:20px;background:#1a1228;border-radius:12px;border:2px solid #f0c060;box-shadow:0 0 40px rgba(240,192,96,0.4);animation:pulse 1s infinite;">
+        <div style="font-size:48px;margin-bottom:8px;">🔊</div>
+        <div style="color:#fff;font-size:24px;font-weight:800;">轮到你了！</div>
+        <div style="color:#f0c060;font-size:14px;margin-top:6px;">用一句话描述你的词</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;justify-content:center;">
+        <span style="background:#22c55e;color:#000;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;">🔔 提示音</span>
+        <span style="background:#3b82f6;color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;">📱 浏览器通知</span>
+        <span style="background:#f59e0b;color:#000;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;">📳 震动</span>
+      </div>
+      <p style="color:#4ade80;font-size:12px;margin-top:12px;">✅ 声音+视觉+通知三重提醒，不会错过</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>具体增强项</h3>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-body">
+      <h3>🔔 提示音效</h3>
+      <p>轮到发言时播放短促提示音（Web Audio API 生成，无需音频文件）。</p>
+      <p style="color:#888;font-size:12px;">简单的 "叮" 声，不刺耳，不依赖外部资源</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h3>📱 浏览器通知</h3>
+      <p>如果页面不在前台（切到其他标签页），弹出系统通知。</p>
+      <p style="color:#888;font-size:12px;">"🔥 轮到你了！请描述你的词语" — 点击切回游戏</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h3>💫 全屏脉冲动画</h3>
+      <p>聚光灯区域放大、加阴影光晕、边框剧烈脉冲。</p>
+      <p style="color:#888;font-size:12px;">整个 speaker spotlight 区域无法忽视</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h3>📳 手机震动</h3>
+      <p>移动端触发 navigator.vibrate()，短震动提醒。</p>
+      <p style="color:#888;font-size:12px;">只在手机上有用，桌面端忽略</p>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+</style>

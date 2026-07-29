@@ -124,8 +124,8 @@ io.on('connection', (socket) => {
     }
 
     const activeCount = getActivePlayers(room).length;
-    if (activeCount < 4) {
-      socket.emit('error', { message: '至少需要 4 个真人玩家' });
+    if (activeCount < 3) {
+      socket.emit('error', { message: '至少需要 3 个真人玩家' });
       return;
     }
 
@@ -195,12 +195,16 @@ io.on('connection', (socket) => {
     const activePlayers = getActivePlayers(room);
     const allPlayers = activePlayers.map(p => ({
       id: p.id, nickname: p.gameName || p.nickname, avatar: p.avatar,
+      gameNumber: p.gameNumber, gameColor: p.gameColor, gameEmoji: p.gameEmoji,
     }));
     if (room.aiPlayer) {
       allPlayers.push({
         id: room.aiPlayer.id,
         nickname: room.aiPlayer.gameName || room.aiPlayer.nickname,
         avatar: room.aiPlayer.avatar,
+        gameNumber: room.aiPlayer.gameNumber,
+        gameColor: room.aiPlayer.gameColor,
+        gameEmoji: room.aiPlayer.gameEmoji,
       });
     }
 
@@ -404,10 +408,35 @@ io.on('connection', (socket) => {
 
 function getPlayerDisplayStatic(room, playerId) {
   if (playerId === 'ai-player' && room.aiPlayer) {
-    return { name: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar };
+    return {
+      name: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar,
+      gameNumber: room.aiPlayer.gameNumber, gameColor: room.aiPlayer.gameColor,
+    };
   }
   const p = room.players.find(p => p.id === playerId);
-  if (p) return { name: p.gameName || p.nickname, avatar: p.avatar };
+  if (p) return {
+    name: p.gameName || p.nickname, avatar: p.avatar,
+    gameNumber: p.gameNumber, gameColor: p.gameColor,
+  };
+  return { name: '未知', avatar: '❓' };
+}
+
+function getPlayerInfo(room, playerId) {
+  if (playerId === 'ai-player' && room.aiPlayer) {
+    return {
+      name: room.aiPlayer.gameName || room.aiPlayer.nickname,
+      avatar: room.aiPlayer.avatar,
+      gameNumber: room.aiPlayer.gameNumber,
+      gameColor: room.aiPlayer.gameColor,
+    };
+  }
+  const p = room.players.find(p => p.id === playerId);
+  if (p) return {
+    name: p.gameName || p.nickname,
+    avatar: p.avatar,
+    gameNumber: p.gameNumber,
+    gameColor: p.gameColor,
+  };
   return { name: '未知', avatar: '❓' };
 }
 
@@ -417,21 +446,31 @@ function getVoteCandidates(room) {
   if (room.aiPlayer) activeIds.push(room.aiPlayer.id);
   return activeIds
     .filter(id => !eliminated.includes(id))
-    .map(id => ({
-      id,
-      nickname: getPlayerDisplayStatic(room, id).name,
-      avatar: getPlayerDisplayStatic(room, id).avatar,
-    }));
+    .map(id => {
+      const info = getPlayerInfo(room, id);
+      return {
+        id,
+        nickname: info.name,
+        avatar: info.avatar,
+        gameNumber: info.gameNumber,
+        gameColor: info.gameColor,
+      };
+    });
 }
 
 function getAllCandidates(room) {
   const ids = room.players.filter(p => !p._disconnected).map(p => p.id);
   if (room.aiPlayer) ids.push(room.aiPlayer.id);
-  return ids.map(id => ({
-    id,
-    nickname: getPlayerDisplayStatic(room, id).name,
-    avatar: getPlayerDisplayStatic(room, id).avatar,
-  }));
+  return ids.map(id => {
+    const info = getPlayerInfo(room, id);
+    return {
+      id,
+      nickname: info.name,
+      avatar: info.avatar,
+      gameNumber: info.gameNumber,
+      gameColor: info.gameColor,
+    };
+  });
 }
 
 // ===== 启动 =====

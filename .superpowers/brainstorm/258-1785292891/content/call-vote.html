@@ -1,0 +1,90 @@
+<h2>发起投票逻辑改进</h2>
+<p class="subtitle">当前：第2轮起一人点→直接投票，缺乏制约。以下是改进方案</p>
+
+<div class="section">
+  <h3>方案 A：附议制（推荐）</h3>
+</div>
+<div class="mockup">
+  <div class="mockup-body" style="padding:20px;">
+    <p style="color:#f0c060;font-size:13px;margin-bottom:16px;">流程：某人发起 → 等待附议 → 1人同意即通过 → 进入投票</p>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;font-size:13px;">
+      <span style="background:#2a1a3c;padding:8px 14px;border-radius:8px;">🔵① 发起投票</span>
+      <span style="color:#888;">→</span>
+      <span style="background:#1a2740;border:1px dashed #f0c060;padding:8px 14px;border-radius:8px;">⏳ 等待附议 <span style="color:#f59e0b;">(10s)</span></span>
+      <span style="color:#888;">→</span>
+      <span style="background:#1a2740;padding:8px 14px;border-radius:8px;">🔴② 附议 ✓</span>
+      <span style="color:#888;">→</span>
+      <span style="background:#ef4444;color:#fff;padding:8px 14px;border-radius:8px;font-weight:700;">🗳️ 开始投票</span>
+    </div>
+    <div style="margin-top:16px;padding:12px;background:#1a1228;border-radius:8px;">
+      <p style="font-size:12px;color:#888;margin:0;">
+        💡 聊天区显示：<span style="color:#3b82f6;">蓝1号</span> 发起投票（需要 1 人附议，10 秒内）<br>
+        💡 其余人看到按钮变为「附议投票」<br>
+        💡 1 人附议即通过；超时无人附议则取消
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案 B：直接触发 + 冷却</h3>
+</div>
+<div class="mockup">
+  <div class="mockup-body" style="padding:20px;">
+    <p style="color:#f0c060;font-size:13px;margin-bottom:16px;">流程：某人发起 → 3 秒倒计时 → 直接进入投票</p>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;font-size:13px;">
+      <span style="background:#2a1a3c;padding:8px 14px;border-radius:8px;">🔵① 发起投票</span>
+      <span style="color:#888;">→</span>
+      <span style="background:#1a2740;border:1px dashed #f0c060;padding:8px 14px;border-radius:8px;">⏳ 3·2·1</span>
+      <span style="color:#888;">→</span>
+      <span style="background:#ef4444;color:#fff;padding:8px 14px;border-radius:8px;font-weight:700;">🗳️ 开始投票</span>
+    </div>
+    <div style="margin-top:16px;padding:12px;background:#1a1228;border-radius:8px;">
+      <p style="font-size:12px;color:#888;margin:0;">
+        💡 3 秒窗口内其他玩家可以看到倒计时，心理上有个准备<br>
+        💡 每回合每人只能发起 1 次（冷却）<br>
+        ❌ 依然是一人决定，缺乏制约
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>方案 C：保持现状 + 修边界</h3>
+</div>
+<div class="mockup">
+  <div class="mockup-body" style="padding:20px;">
+    <p style="color:#f0c060;font-size:13px;margin-bottom:16px;">只修 bug，不改流程</p>
+    <ul style="font-size:13px;color:#ccc;line-height:1.8;">
+      <li>✅ 禁止重复触发（已发起投票时按钮禁用）</li>
+      <li>✅ 投票进行中不显示发起按钮</li>
+      <li>✅ 第 3 轮描述完成后自动投票，不需手动发起</li>
+      <li>✅ 聊天区显示谁发起的</li>
+      <li>❌ 依然是一人即可强行发起</li>
+    </ul>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>附议制</h3>
+      <p>需要 1 人附议才通过，更公平</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>直接触发 + 冷却</h3>
+      <p>加 3 秒倒计时，简单但有制约</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>只修边界</h3>
+      <p>修 bug 不改流程，最省事</p>
+    </div>
+  </div>
+</div>

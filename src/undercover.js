@@ -8,13 +8,16 @@ const DESCRIBE_DURATION = 30000;      // 每人 30 秒
 const VOTE_DURATION = 30000;          // 投票 30 秒
 const RESULT_DURATION = 12000;        // 结果展示 12 秒
 const SUBROUNDS_BEFORE_VOTE = 3;      // 3 轮描述后自动投票
+const CALL_VOTE_COUNTDOWN = 3000;     // 发起投票倒计时 3 秒
 
-const GAME_NAMES = [
-  '热心网友', '睡不醒', '奶茶不加糖', '今天周五', '外卖到了吗',
-  '你说的都对', '不想上班', '吃瓜一线', '暗中观察', '先溜一步',
-  '电量不足', '正在加载中',
+// 玩家编号颜色：①蓝 ②红 ③绿 ④金 ⑤紫
+const PLAYER_COLORS = [
+  { number: 1, color: '#3b82f6', name: '蓝', emoji: '🔵' },
+  { number: 2, color: '#ef4444', name: '红', emoji: '🔴' },
+  { number: 3, color: '#22c55e', name: '绿', emoji: '🟢' },
+  { number: 4, color: '#f59e0b', name: '金', emoji: '🟡' },
+  { number: 5, color: '#a855f7', name: '紫', emoji: '🟣' },
 ];
-const AI_AVATARS = ['🤖', '👾', '👽', '🐱', '🐶', '🦊', '🐼', '🐨'];
 
 /**
  * 启动谁是卧底
@@ -31,19 +34,29 @@ async function startUndercover(room, io) {
 
   console.log(`[卧底] ${room.id} 词对: ${wordPair.civilian} / ${wordPair.undercover} (${wordPair.source})`);
 
-  // 分配匿名
+  // 分配玩家编号（彩色圆圈 ①~⑤）
   const activePlayers = room.players.filter(p => !p._disconnected);
   const totalNeeded = activePlayers.length + 1;
-  const gameNames = shuffleArray([...GAME_NAMES]).slice(0, totalNeeded);
+  const shuffledNumbers = shuffleArray([0, 1, 2, 3, 4]).slice(0, totalNeeded);
 
-  activePlayers.forEach((p, i) => { p.gameName = gameNames[i]; });
+  activePlayers.forEach((p, i) => {
+    const c = PLAYER_COLORS[shuffledNumbers[i]];
+    p.gameName = c.name + c.number + '号';
+    p.gameNumber = c.number;
+    p.gameColor = c.color;
+    p.gameEmoji = c.emoji;
+  });
 
-  const aiAvatar = AI_AVATARS[Math.floor(Math.random() * AI_AVATARS.length)];
+  // AI 也分配编号
+  const aiColor = PLAYER_COLORS[shuffledNumbers[shuffledNumbers.length - 1]];
   room.aiPlayer = {
     id: 'ai-player',
-    gameName: gameNames[gameNames.length - 1],
-    nickname: gameNames[gameNames.length - 1],
-    avatar: aiAvatar,
+    gameName: aiColor.name + aiColor.number + '号',
+    gameNumber: aiColor.number,
+    gameColor: aiColor.color,
+    gameEmoji: aiColor.emoji,
+    nickname: aiColor.name + aiColor.number + '号',
+    avatar: aiColor.emoji,
   };
 
   // 随机选卧底
@@ -80,6 +93,8 @@ async function startUndercover(room, io) {
  */
 function startSubRound(room, io) {
   room.chatHistory = room.chatHistory || [];
+  room._voteCallInProgress = false;
+  if (room._callVoteTimer) { clearTimeout(room._callVoteTimer); room._callVoteTimer = null; }
   const activeIds = getAllActiveIds(room).filter(id => !room.eliminatedPlayers.includes(id));
   // 首轮首次需要等待玩家从 room.html 跳转过来
   const isFirstEver = room.subRound === 1 && room.voteRound === 1;
@@ -121,6 +136,8 @@ function nextTurn(room, io) {
     playerId: currentId,
     playerName: display.name,
     playerAvatar: display.avatar,
+    gameNumber: display.gameNumber,
+    gameColor: display.gameColor,
     index: room.describeIndex + 1,
     total: room.describeOrder.length,
     duration: DESCRIBE_DURATION,
@@ -170,6 +187,7 @@ async function aiDescribe(room, io) {
   const msg = {
     id: 'desc-' + Date.now(), senderId: 'ai-player',
     senderName: aiName, senderAvatar: room.aiPlayer.avatar,
+    senderGameNumber: room.aiPlayer.gameNumber, senderGameColor: room.aiPlayer.gameColor,
     content: description || '嗯...我描述的话，就是那种很常见的东西',
     timestamp: Date.now(), isDescription: true,
   };
@@ -198,7 +216,8 @@ function handleDescribe(room, socketId, content, io) {
   const displayName = player.gameName || player.nickname;
   const msg = {
     id: 'desc-' + Date.now(), senderId: socketId,
-    senderName: displayName, senderAvatar: player.avatar,
+    senderName: displayName, senderAvatar: player.gameEmoji || player.avatar,
+    senderGameNumber: player.gameNumber, senderGameColor: player.gameColor,
     content: content.trim().slice(0, 200),
     timestamp: Date.now(), isDescription: true,
   };
@@ -240,23 +259,41 @@ function finishSubRound(room, io) {
 function callVote(room, socketId, io) {
   if (!room.state.startsWith('ROUND_')) return;
   if (room.subRound < 2) {
-    // 至少完成 1 轮描述才能投票
     io.to(socketId).emit('error', { message: '至少完成 1 轮描述后才能发起投票' });
+    return;
+  }
+  // 本轮已有人发起过投票
+  if (room._voteCallInProgress) {
+    io.to(socketId).emit('error', { message: '已经有人发起投票了，请等待' });
     return;
   }
 
   const player = room.players.find(p => p.id === socketId);
   const name = player ? (player.gameName || player.nickname) : '有人';
 
-  // 直接跳到投票
+  room._voteCallInProgress = true;
+
+  // 停止当前发言
   if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  io.to(room.id).emit('turn_end', { playerId: null, playerName: '', reason: 'vote_called' });
+
+  // 广播倒计时
+  io.to(room.id).emit('call_vote_started', {
+    caller: name,
+    callerId: socketId,
+    countdown: CALL_VOTE_COUNTDOWN,
+  });
   io.to(room.id).emit('chat_message', {
     id: 'sys-' + Date.now(), senderId: 'system', senderName: '系统', senderAvatar: '🗳️',
-    content: `${name} 发起了投票！`,
+    content: `${name} 发起了投票！${CALL_VOTE_COUNTDOWN / 1000} 秒后开始...`,
     timestamp: Date.now(), isSystem: true,
   });
-  io.to(room.id).emit('turn_end', { playerId: null, playerName: '', reason: 'vote_called' });
-  setTimeout(() => startEliminationVote(room, io), 800);
+
+  // 3 秒后进入投票
+  room._callVoteTimer = setTimeout(() => {
+    room._voteCallInProgress = false;
+    startEliminationVote(room, io);
+  }, CALL_VOTE_COUNTDOWN);
 }
 
 /**
@@ -266,6 +303,8 @@ function startEliminationVote(room, io) {
   room.state = 'ROUND_VOTE';
   room.votes = [];
   room._voteRound = room.voteRound;
+  room._voteCallInProgress = false;
+  if (room._callVoteTimer) { clearTimeout(room._callVoteTimer); room._callVoteTimer = null; }
 
   const activeIds = getAllActiveIds(room).filter(id => !room.eliminatedPlayers.includes(id));
   const candidates = activeIds.map(id => ({
@@ -325,12 +364,12 @@ function finishEliminationVote(room, io) {
   }
 
   const eliminatedDisplay = eliminated
-    ? { id: eliminated.targetId, name: eliminated.targetName, avatar: eliminated.targetAvatar, votes: eliminated.votes }
+    ? { id: eliminated.targetId, name: eliminated.targetName, avatar: eliminated.targetAvatar, gameNumber: eliminated.gameNumber, gameColor: eliminated.gameColor, votes: eliminated.votes }
     : null;
 
   io.to(room.id).emit('eliminate_result', {
     eliminated: eliminatedDisplay, wasUndercover, gameOver, winner, remainingCount,
-    results: results.map(r => ({ name: r.targetName, avatar: r.targetAvatar, votes: r.votes })),
+    results: results.map(r => ({ name: r.targetName, avatar: r.targetAvatar, gameNumber: r.gameNumber, gameColor: r.gameColor, votes: r.votes })),
   });
 
   if (gameOver) {
@@ -399,7 +438,7 @@ function revealAi(room, io) {
     wordPair: { civilian: room.wordPair.civilian, undercover: room.wordPair.undercover },
     guessedCorrectly,
     topTarget: topTarget ? { name: topTarget.targetName, votes: topTarget.votes } : null,
-    results: results.map(r => ({ name: r.targetName, avatar: r.targetAvatar, votes: r.votes })),
+    results: results.map(r => ({ name: r.targetName, avatar: r.targetAvatar, gameNumber: r.gameNumber, gameColor: r.gameColor, votes: r.votes })),
   });
 
   // 立即重置房间状态
@@ -417,7 +456,7 @@ function revealAi(room, io) {
   room.describeIndex = 0;
   room.mode = null;
 
-  room.players.forEach(p => { p.isReady = false; delete p.gameName; delete p.gameAvatar; });
+  room.players.forEach(p => { p.isReady = false; delete p.gameName; delete p.gameNumber; delete p.gameColor; delete p.gameEmoji; delete p.gameAvatar; });
 
   // ★ 确保游戏结束后始终有人是房主
   const hasHost = room.players.some(p => p.isHost);
@@ -436,9 +475,15 @@ function revealAi(room, io) {
 function shuffleArray(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
 
 function getPlayerDisplay(room, playerId) {
-  if (playerId === 'ai-player' && room.aiPlayer) return { name: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar };
+  if (playerId === 'ai-player' && room.aiPlayer) return {
+    name: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar,
+    gameNumber: room.aiPlayer.gameNumber, gameColor: room.aiPlayer.gameColor,
+  };
   const p = room.players.find(p => p.id === playerId);
-  if (p) return { name: p.gameName || p.nickname, avatar: p.avatar };
+  if (p) return {
+    name: p.gameName || p.nickname, avatar: p.avatar,
+    gameNumber: p.gameNumber, gameColor: p.gameColor,
+  };
   return { name: '未知', avatar: '❓' };
 }
 
@@ -449,8 +494,14 @@ function getAllActiveIds(room) {
 }
 
 function buildPlayerList(room, activePlayers) {
-  const list = activePlayers.map(p => ({ id: p.id, nickname: p.gameName || p.nickname, avatar: p.avatar }));
-  if (room.aiPlayer) list.push({ id: room.aiPlayer.id, nickname: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar });
+  const list = activePlayers.map(p => ({
+    id: p.id, nickname: p.gameName || p.nickname, avatar: p.avatar,
+    gameNumber: p.gameNumber, gameColor: p.gameColor, gameEmoji: p.gameEmoji,
+  }));
+  if (room.aiPlayer) list.push({
+    id: room.aiPlayer.id, nickname: room.aiPlayer.gameName || room.aiPlayer.nickname, avatar: room.aiPlayer.avatar,
+    gameNumber: room.aiPlayer.gameNumber, gameColor: room.aiPlayer.gameColor, gameEmoji: room.aiPlayer.gameEmoji,
+  });
   return list;
 }
 
