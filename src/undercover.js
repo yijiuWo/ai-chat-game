@@ -9,6 +9,9 @@ const VOTE_DURATION = 30000;          // 投票 30 秒
 const RESULT_DURATION = 12000;        // 结果展示 12 秒
 const SUBROUNDS_BEFORE_VOTE = 3;      // 3 轮描述后自动投票
 const CALL_VOTE_COUNTDOWN = 3000;     // 发起投票倒计时 3 秒
+const AI_DESCRIBE_MAX_LEN = 15;       // AI 描述最多 15 字
+// 中文 + ASCII 常见标点，AI 描述里一律剥掉
+const PUNCT_RE = /[，。！？；：、…—·～「」『』（）《》〈〉【】〔〕“”‘’"'.,!?;:'`~\-_]/g;
 
 // 玩家编号颜色：①蓝 ②红 ③绿 ④金 ⑤紫
 const PLAYER_COLORS = [
@@ -171,16 +174,18 @@ async function aiDescribe(room, io) {
 
   const prompt = `你正在玩"谁是卧底"游戏。你的名字是【${aiName}】。你的词语是：【${word}】。
 
-这是第 ${room.subRound} 轮描述（共 3 轮）。请用一句话描述这个词：
+这是第 ${room.subRound} 轮描述（共 3 轮）。请用一句很短的话描述这个词：
 - 不能直接说出这个词
-- 描述要模糊但合理
-- 口语化，1-2句话
+- 描述要模糊但合理，像真人随口说的
+- 不要使用任何标点符号（句号、逗号、问号、省略号等一律不用）
+- 控制在 10-15 个字以内，越短越好
 - 第1轮给模糊线索，第2-3轮可以稍微具体一点`;
 
-  let description;
+  let description = '';
   try {
-    description = await generateReply(prompt, '');
-  } catch { description = '这个东西...挺常见的，大家都见过吧'; }
+    description = sanitizeDescription(await generateReply(prompt, ''));
+  } catch { description = ''; }
+  if (!description) description = '这个挺常见的';
 
   if (room.turnTimer) clearTimeout(room.turnTimer);
 
@@ -431,16 +436,21 @@ function revealAi(room, io) {
   const guessedCorrectly = topTarget && topTarget.targetId === room.aiPlayer.id;
 
   io.to(room.id).emit('ai_reveal', {
-    aiPlayer: { id: room.aiPlayer.id, name: room.aiPlayer.gameName, avatar: room.aiPlayer.avatar },
+    aiPlayer: { id: room.aiPlayer.id, name: room.aiPlayer.gameName, avatar: room.aiPlayer.avatar, realName: 'AI' },
     undercoverPlayer: {
       id: room.undercoverPlayerId,
       name: getPlayerDisplay(room, room.undercoverPlayerId).name,
       avatar: getPlayerDisplay(room, room.undercoverPlayerId).avatar,
+      realName: getRealNickname(room, room.undercoverPlayerId),
     },
     wordPair: { civilian: room.wordPair.civilian, undercover: room.wordPair.undercover },
     guessedCorrectly,
     topTarget: topTarget ? { name: topTarget.targetName, votes: topTarget.votes } : null,
-    results: results.map(r => ({ name: r.targetName, avatar: r.targetAvatar, gameNumber: r.gameNumber, gameColor: r.gameColor, votes: r.votes })),
+    results: results.map(r => ({
+      id: r.targetId, name: r.targetName, avatar: r.targetAvatar,
+      gameNumber: r.gameNumber, gameColor: r.gameColor, votes: r.votes,
+      realName: getRealNickname(room, r.targetId),
+    })),
   });
 
   // 立即重置房间状态
@@ -487,6 +497,29 @@ function getPlayerDisplay(room, playerId) {
     gameNumber: p.gameNumber, gameColor: p.gameColor,
   };
   return { name: '未知', avatar: '❓' };
+}
+
+/**
+ * 清洗 AI 描述：去掉所有标点、合并空白、限制字数
+ * @param {string} text
+ * @param {number} maxLen - 最大字数
+ * @returns {string}
+ */
+function sanitizeDescription(text, maxLen = AI_DESCRIBE_MAX_LEN) {
+  if (!text) return '';
+  return text.replace(PUNCT_RE, '').replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+/**
+ * 取玩家填写的真实昵称（AI 返回 'AI'）
+ * @param {object} room
+ * @param {string} playerId
+ * @returns {string}
+ */
+function getRealNickname(room, playerId) {
+  if (playerId === 'ai-player') return 'AI';
+  const p = room.players.find(p => p.id === playerId);
+  return p ? (p.nickname || '') : '';
 }
 
 function getAllActiveIds(room) {

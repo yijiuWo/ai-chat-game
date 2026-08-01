@@ -488,10 +488,17 @@ socket.on('ai_reveal', ({ aiPlayer, undercoverPlayer, wordPair, guessedCorrectly
       const circle = (r.gameNumber != null)
         ? renderPlayerCircle(r.gameNumber, r.gameColor, 20)
         : escapeHtml(r.avatar || '👤');
+      // 游戏结束：编号名后补真实昵称（自己显示"我"）
+      let nameLabel = r.name || r.nickname || r.playerName || '?';
+      if (r.id && r.id === state.myId) {
+        nameLabel += '（我）';
+      } else if (r.realName) {
+        nameLabel += '（' + r.realName + '）';
+      }
       const row = document.createElement('div');
       row.className = 'vote-bar-row';
       row.innerHTML =
-        '<span class="vote-bar-label">' + circle + ' ' + escapeHtml(r.name || r.nickname || r.playerName || '?') + '</span>' +
+        '<span class="vote-bar-label">' + circle + ' ' + escapeHtml(nameLabel) + '</span>' +
         '<div class="vote-bar-track">' +
           '<div class="vote-bar-fill' + (isTop ? ' top' : '') + '" style="width:' + pct + '%;"></div>' +
         '</div>' +
